@@ -1,5 +1,16 @@
 # Behavioral Cloning - Udacity CarND Project 3
 
+[//]: # (Image References)
+
+[initial]: ./docs/initial.png "Initial distribution prior augmentation"
+[track-1-left]: ./docs/tr1_lcr.png "Track one left"
+[track-1-left-flipped]: ./docs/tr1_lcr_flip.png "Track one left"
+[track-1-right]: ./docs/tr1_lcr_right.png "Track one right"
+[track-1-right-flipped]: ./docs/tr1_lcr_right_flip.png "Track one right"
+[combined]: ./docs/combined.png "Combined all tracks"
+[track-2]: ./docs/tr2_lcr.png "Track two"
+[track-2n]: ./docs/tr2_lcr_noise.png "Track two with noise"
+
 ## Summary
 In this excercise, solely the visual input from three front-facing cameras in a
 simulator are used
@@ -17,7 +28,7 @@ is attributed to the ability of deep CNNs to innately capture complex details of
 the scene and their relations. The resulting proposal is that the stream of a monocular
 vision sensor will be enough to make the car drive itself around complex terrains.
 
-### Data Sampling and Preprocessing
+### Data Sampling
 In this excercise a video stream of a car being driven in simulation around two
 tracks was recorded, a 'lake' track and a 'mountain' track, named track-1 and track-2
 respectively.
@@ -27,11 +38,76 @@ Although being at least twice as wide as the car in the simulator, the track pro
 to be difficult to be learned due to varios ligthning condition changes, texture
 changes on the road and surroundings, bridge crossings and interrupted lane markings.
 
-***Track-2*** is a two-lane mountain track with continuos markings but very narrow lane-width.
-It's terrain is abbundant of steep climbs, drops and sharp turns.
+Since going in a circle around the track will lead to predominance of turns in
+the direction of driving, the track was driven in both directions
 
-The global lighting condition and scenery color distribution varied greatly
-between both tracks.   
+#### Track 1 - Driving Left
+
+![][initial]
+
+#### Track 1 - Driving Right
+
+![][track-1-right]
+
+
+***Track-2*** is a two-lane mountain track with continuos markings but with a narrow
+lane-width. The horizon on this track is in some cases visible, but mostly not. Also
+the predominant background are dark-green steep hills, steep rocks and abysses.
+The terrain of track 2 is abbundant of steep climbs, drops and sharp turns.
+
+#### Track 2 - Driving in Both lanes
+![][track-2]
+
+
+### Data Augmentation
+
+The global lighting condition and scenery color distribution varies greatly
+between both tracks. To increase the ability of the network to generalize on both
+tracks, several pre-processing data augmentations where attempted.
+
+#### Normalizing the steering angle distributions
+
+As can be seen, the steering angle distributions on track-1 depend on the
+direction being driven and are mostly concentrated around zero - i.e. around straight-line driving . Since it is necessary to train the car to make turns, as good as driving straight in a line, curved sections must be augmented and repeated.
+
+
+##### **Using the Side Cameras**
+The simulator generates data from three camera locations, centre of car and left/right
+translated cameras. The left-right translation was assumed to impact the steering angle
+by a parametric threshold (0.25 < threshold < 0.35). This effectively tripples the
+dataset by solely adding images that simulate curves.
+
+![][track-1-left]
+
+##### **Image Flipping**
+Sections of the data with a greater steering angle then a threshold (0.1 < threshold < 0.4) where flipped and their corresponding steering angles inverted.
+
+**Example**: Track-1 Left driving flipped:
+![][track-1-left-flipped]
+
+**Example**: Track-1 Right driving flipped:
+![][track-1-right-flipped]
+
+As can be seen, image distributions now are approximately symmetrical mirror images
+of each other round the 0 axis.
+
+##### **Combining different runs**
+
+In order to improve upon the left-right driving differences, runs can be combined.
+
+![][combined]
+
+##### **Reducing Zero Angle Images**
+
+Since zero-angle images are still the most abbundant, their probability of occurrence
+was reduced to a parametric threshold (0.2 < threshold < 0.4)
+
+
+
+
+
+
+
 ## Method
 
 ## Results
