@@ -1,24 +1,16 @@
 import os
+import sys
 import csv
 import cv2
 import json
 import numpy as np
 import pickle
 import sklearn
+import argparse
+import shutil
 import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
-
-from keras.models import Sequential
-from keras.layers import (
-    Flatten,
-    Dense,
-    MaxPooling2D,
-    Dropout,
-    Lambda,
-    AveragePooling2D
-)
-from keras.layers.convolutional import Conv2D, Cropping2D
 
 from ConfigParser import SafeConfigParser
 conf = SafeConfigParser()
@@ -131,7 +123,6 @@ def generator(samples, conf):
     lnthresh = conf.getfloat('Preprocess', 'line_image_probality')
     perturb_prob = conf.getfloat('Preprocess', 'perturbation_probability')
 
-
     num_samples = len(samples)
     while 1: # Loop forever so the generator never terminates
         sklearn.utils.shuffle(samples)
@@ -176,19 +167,14 @@ def generator(samples, conf):
                 if np.random.rand() < perturb_prob:
                     images[indx] = perturb_brightness(image)
 
-            yield np.array(images), np.array(angles)
+            yield images, angles
 
-DEFAULT_DATA_PATH_LIST = [
-    'tr2_960x720',
-    'tr_960x720',
-    'tr_960x720_right'
-]
+def get_samples(path_list, test_size=0.2,  plot=False):
 
-def get_samples(data_paths=DEFAULT_DATA_PATH_LIST, test_size=0.2, plot=False):
     samples = []
-    if type(data_paths) is not list and type(data_paths) is str:
-        data_paths = list(data_paths)
-    for path in data_paths:
+    if type(path_list) is not list and type(path_list) is str:
+        path_list = list(path_list)
+    for path in path_list:
         samples.extend(read_in_csv(path))
     samples = sklearn.utils.shuffle(samples)
     train, valid = train_test_split(samples, test_size=test_size)
@@ -217,9 +203,23 @@ def show_samples(samples):
     plt.title("Right Curve:{}".format(y[indx[2]]))
     plt.show()
 
-def build_cnn_model(crop=(60,25)):
-    UPPER_CROPPING_BOUND = crop[0]
-    LOWER_CROPPING_BOUND = crop[1]
+def build_cnn_model(conf):
+
+    from keras.models import Sequential
+    from keras.layers import (
+        Flatten,
+        Dense,
+        MaxPooling2D,
+        Dropout,
+        Lambda,
+        AveragePooling2D
+    )
+    from keras.layers.convolutional import Conv2D, Cropping2D
+
+    UPPER_CROPPING_BOUND = conf.getint('Model', 'upper_cropping_bound')
+    LOWER_CROPPING_BOUND = conf.getint('Model', 'lower_cropping_bound')
+    DROPOUT = conf.getfloat('Model', 'dropout')
+
     model = Sequential()
     model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=(160, 320, 3)))
     model.add(
@@ -238,62 +238,96 @@ def build_cnn_model(crop=(60,25)):
     model.add(Conv2D(12, strides=(1,1), kernel_size=(1,1), activation='relu'))
     model.add(Flatten())
     model.add(Dense(256))
-    model.add(Dropout(0.5))
+    model.add(Dropout(DROPOUT))
     model.add(Dense(128))
-    model.add(Dropout(0.5))
+    model.add(Dropout(DROPOUT))
     model.add(Dense(24))
     model.add(Dense(1))
     print(model.summary())
     return model
 
-if __name__ == "__main__":
-
+def parser():
     parser = argparse.ArgumentParser(description="""
-    Trains a CNN for behavioral cloning for the Udacity CARND course (1-3)
+    Trains a CNN for behavioral cloning for the Udacity CARND course
     """)
 
-
     parser.add_argument(
-        '--output',
+        '-o',
         type=str,
-        default='model',
-        dest='model_name',
-        help="""Name the model for saving
+        default=None,
+        dest='output',
+        help="""Output model name
         """
     )
-    args = parser.parse_args()
-    BATCH_SIZE = args.batch_size
-    EPOCHS = args.epochs
-    MODEL_NAME = args.model_name
 
-    train_samples, validation_samples = get_samples()
-
-    # compile and train the model using the generator function
-    train_generator = generator(train_samples, batch_size=BATCH_SIZE)
-    validation_generator = generator(validation_samples, batch_size=BATCH_SIZE)
-
-    model = build_cnn_model()
-    model.compile(loss='mse', optimizer='adam')
-    hobj = model.fit_generator(
-        train_generator,
-        steps_per_epoch = len(train_samples)//BATCH_SIZE,
-        validation_data = validation_generator,
-        validation_steps = len(validation_samples)//BATCH_SIZE,
-        epochs=12,
-        max_q_size=2,
-        pickle_safe=False,
-        verbose=1
+    parser.add_argument(
+        '-i',
+        type=str,
+        default=None,
+        dest='input_model',
+        help="""Input a pre-trained model
+        """
     )
 
+    parser.add_argument(
+        '-s',
+        default=False,
+        dest="plot_epochs",
+        help="Plot model performance"
+    )
+    args = parser.parse_args()
+    if args.output is None:
+        print("Output model name required")
+        sys.exit(1)
+    return args
 
-    plt.plot(hobj.history['loss'])
-    plt.plot(hobj.history['val_loss'])
-    plt.title('model mean squared error loss')
-    plt.ylabel('mean squared error loss')
-    plt.xlabel('epoch')
-    plt.legend(['training set', 'validation set'], loc='upper right')
-    plt.show()
 
-    model.save('{name}.h5'.format(name=MODEL_NAME))
-    with open('{name}.json'.format(name=MODEL_NAME), 'w') as fid:
-        json.dump(model.to_json(), fid, indent=4, sort_keys=True)
+if __name__ == "__main__":
+
+    args = parser()
+    BATCH_SIZE = conf.getint('Train', 'batch_size')
+    EPOCHS = conf.getint('Train', 'epochs')
+    RUNS = conf.options('Run')
+    SPLIT_RATIO = conf.getfloat('Train', 'split')
+    MAX_Q_SIZE = conf.getint('Train', 'max_queue_size')
+
+    model = build_cnn_model(conf)
+    model.compile(loss='mse', optimizer='adam')
+
+    for run_indx, run in enumerate(RUNS):
+        path_list = [os.path.join('data', path) for path in conf.get('Run', run).split()]
+        train_samples, validation_samples = get_samples(path_list, test_size=SPLIT_RATIO)
+        # compile and train the model using the generator function
+        train_gen = generator(train_samples,conf)
+        valid_gen = generator(validation_samples,conf)
+
+        hobj = model.fit_generator(
+            train_gen,
+            steps_per_epoch = len(train_samples)//BATCH_SIZE,
+            validation_data = valid_gen,
+            validation_steps = len(validation_samples)//BATCH_SIZE,
+            epochs=EPOCHS,
+            max_q_size=MAX_Q_SIZE,
+            pickle_safe=False,
+            verbose=1
+        )
+
+    def save_model(model, run_name):
+        data_dir = os.path.join('runs', run_name)
+        os.mkdir(data_dir)
+        model.save(os.path.join(data_dir, 'model.h5'))
+        with open(os.path.join(data_dir, 'model.json'), 'w') as fid:
+            json.dump(model.to_json(), fid)
+        shutil.copyfile('model.ini', os.path.join(data_dir, 'model.ini'))
+
+    save_model(model, args.output)
+
+
+    if args.plot_epochs:
+        plt.plot(hobj.history['loss'])
+        plt.plot(hobj.history['val_loss'])
+        plt.title('model mean squared error loss')
+        plt.ylabel('mean squared error loss')
+        plt.xlabel('epoch')
+        plt.legend(['training set', 'validation set'], loc='upper right')
+        plt.show()
