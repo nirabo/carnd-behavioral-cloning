@@ -203,7 +203,7 @@ def show_samples(samples):
     plt.title("Right Curve:{}".format(y[indx[2]]))
     plt.show()
 
-def build_cnn_model(conf):
+def build_model(conf):
 
     from keras.models import Sequential
     from keras.layers import (
@@ -246,6 +246,37 @@ def build_cnn_model(conf):
     print(model.summary())
     return model
 
+def save_model(model, run_name):
+    data_dir = os.path.join('runs', run_name)
+    try:
+        os.mkdir(data_dir)
+    except OSError as e:
+        print(e)
+        ans  = raw_input('Run with same name exists. Do you want to override it (N/y): ')
+        if not 'y' in ans.lower():
+            return False
+
+    model.save(os.path.join(data_dir, 'model.h5'))
+    with open(os.path.join(data_dir, 'model.json'), 'w') as fid:
+        json.dump(model.to_json(), fid)
+    shutil.copyfile('model.ini', os.path.join(data_dir, 'model.ini'))
+
+    plt.plot(hobj.history['loss'])
+    plt.plot(hobj.history['val_loss'])
+    plt.title('model mean squared error loss')
+    plt.ylabel('mean squared error loss')
+    plt.xlabel('epoch')
+    plt.legend(['training set', 'validation set'], loc='upper right')
+    plt.savefig(os.path.join(data_dir, 'model.png'))
+    plt.show()
+
+def load_model(path):
+    from keras.models import model_from_json
+    with open(os.path.join(path, 'model.json'), 'r') as fid:
+        model = model_from_json(json.load(fid))
+    model.load_weights(os.path.join(path, 'model.h5'))
+    return model
+
 def parser():
     parser = argparse.ArgumentParser(description="""
     Trains a CNN for behavioral cloning for the Udacity CARND course
@@ -256,7 +287,7 @@ def parser():
         type=str,
         default=None,
         dest='output',
-        help="""Output model name
+        help="""Specify output model name (Required!)
         """
     )
 
@@ -264,7 +295,7 @@ def parser():
         '-i',
         type=str,
         default=None,
-        dest='input_model',
+        dest='input',
         help="""Input a pre-trained model (path to a past run directory)
         """
     )
@@ -281,21 +312,6 @@ def parser():
         sys.exit(1)
     return args
 
-def save_model(model, run_name):
-    data_dir = os.path.join('runs', run_name)
-    try:
-        os.mkdir(data_dir)
-    except OSError as e:
-        print(e)
-        ans  = raw_input('Run with same name exists. Do you want to override it (N/y): ')
-        if not 'y' in ans.lower():
-            return False
-
-    model.save(os.path.join(data_dir, 'model.h5'))
-    with open(os.path.join(data_dir, 'model.json'), 'w') as fid:
-        json.dump(model.to_json(), fid)
-    shutil.copyfile('model.ini', os.path.join(data_dir, 'model.ini'))
-
 if __name__ == "__main__":
 
     args = parser()
@@ -304,13 +320,12 @@ if __name__ == "__main__":
     RUNS = conf.options('Run')
     SPLIT_RATIO = conf.getfloat('Train', 'split')
     MAX_Q_SIZE = conf.getint('Train', 'max_queue_size')
+    OVERLAP_FACTOR = conf.getfloat('Train', 'overlap_factor')
 
     if args.input is not None:
-        with open(os.path.join(args.input, 'model.json'), 'r') as fid:
-            model = model_from_json(fid.read())
-        model.load_weights(os.path.join(args.input, 'model.h5'))
+        model = load_model(args.input)
     else:
-        model = build_cnn_model(conf)
+        model = build_model(conf)
     model.compile(loss='mse', optimizer='adam')
 
     for run_indx, run in enumerate(RUNS):
@@ -322,9 +337,9 @@ if __name__ == "__main__":
 
         hobj = model.fit_generator(
             train_gen,
-            steps_per_epoch = len(train_samples)//BATCH_SIZE,
+            steps_per_epoch = OVERLAP_FACTOR * len(train_samples)//BATCH_SIZE,
             validation_data = valid_gen,
-            validation_steps = len(validation_samples)//BATCH_SIZE,
+            validation_steps = OVERLAP_FACTOR * len(validation_samples)//BATCH_SIZE,
             epochs=EPOCHS,
             max_q_size=MAX_Q_SIZE,
             pickle_safe=False,
@@ -332,12 +347,3 @@ if __name__ == "__main__":
         )
 
     save_model(model, args.output)
-
-    if args.plot_epochs:
-        plt.plot(hobj.history['loss'])
-        plt.plot(hobj.history['val_loss'])
-        plt.title('model mean squared error loss')
-        plt.ylabel('mean squared error loss')
-        plt.xlabel('epoch')
-        plt.legend(['training set', 'validation set'], loc='upper right')
-        plt.show()
