@@ -20,6 +20,10 @@ from keras.layers import (
 )
 from keras.layers.convolutional import Conv2D, Cropping2D
 
+from ConfigParser import SafeConfigParser
+conf = SafeConfigParser()
+conf.read('model.ini')
+
 def read_in_csv(path, old_data=False):
     """
     Data read-in helper
@@ -103,23 +107,13 @@ def perturb_brightness(img, thresh=0.5):
     img = 255 * (normalize_image(img) + thresh * (np.random.rand() - 0.5))
     return (img).astype(np.uint8)
 
-def generator(samples, batch_size=32, corr_factor=0.3, flip_thresh=0.2, lnthresh=0.4):
+def generator(samples, conf):
     """
     Batch Image generator
 
     Parameters
     ----------
-    samples : list
-        list of paths to images on disk
-
-    batch_size : integer
-        the returned batch siz, flip_thresh=0.1):
-
-    corr_factor : float
-        Correction factor used for camera translation in left and right images
-
-    flip_thresh : float
-        Threshold for deciding image flipping
+    conf : ConfigParser instance
 
     Yields
     -------
@@ -131,6 +125,13 @@ def generator(samples, batch_size=32, corr_factor=0.3, flip_thresh=0.2, lnthresh
         N/A
 
     """
+    batch_size = conf.getint('Train', 'batch_size')
+    corr_factor = conf.getfloat('Preprocess', 'correction_factor')
+    flip_thresh = conf.getfloat('Preprocess', 'flip_threshold')
+    lnthresh = conf.getfloat('Preprocess', 'line_image_probality')
+    perturb_prob = conf.getfloat('Preprocess', 'perturbation_probability')
+
+
     num_samples = len(samples)
     while 1: # Loop forever so the generator never terminates
         sklearn.utils.shuffle(samples)
@@ -153,17 +154,26 @@ def generator(samples, batch_size=32, corr_factor=0.3, flip_thresh=0.2, lnthresh
                         # flip-threshold get flipped
                         images.append(np.fliplr(center_image))
                         angles.append(-center_angle)
-                    elif np.random.rand() > lnthresh:
+                    elif np.random.rand() <= lnthresh:
                         # Append only a fraction of straight-line images
                         # (> line-threshold)
                         images.append(center_image)
                         angles.append(center_angle)
 
+                    if len(angles) > batch_size:
+                        break
+
+            images, angles = (np.array(images), np.array(angles))
+
+            if len(angles) > batch_size:
+                images = images[:batch_size]
+                angles = angles[:batch_size]
+
             # Perturb the image quality
             for indx, image in enumerate(images):
-                if np.random.rand() > 0.7:
+                if np.random.rand() < perturb_prob:
                     images[indx] = add_noise(image)
-                if np.random.rand() > 0.7:
+                if np.random.rand() < perturb_prob:
                     images[indx] = perturb_brightness(image)
 
             yield np.array(images), np.array(angles)
@@ -242,25 +252,7 @@ if __name__ == "__main__":
     Trains a CNN for behavioral cloning for the Udacity CARND course (1-3)
     """)
 
-    parser.add_argument(
-        '--batch_size',
-        type=int,
-        default=16,
-        dest='batch_size',
-        help="""Batch Size for training.
-        If OOM condition occurs, lower batch size first
-        (e.g. `batch_size(16) ~= 1GB GPU memory`)
-        """
-    )
 
-    parser.add_argument(
-        '--training_epochs',
-        type=int,
-        default=8,
-        dest='epochs',
-        help="""Number of Epochs for training.
-        """
-    )
     parser.add_argument(
         '--output',
         type=str,
@@ -273,7 +265,7 @@ if __name__ == "__main__":
     BATCH_SIZE = args.batch_size
     EPOCHS = args.epochs
     MODEL_NAME = args.model_name
-    return 1
+
     train_samples, validation_samples = get_samples()
 
     # compile and train the model using the generator function
