@@ -265,7 +265,7 @@ def parser():
         type=str,
         default=None,
         dest='input_model',
-        help="""Input a pre-trained model
+        help="""Input a pre-trained model (path to a past run directory)
         """
     )
 
@@ -281,6 +281,20 @@ def parser():
         sys.exit(1)
     return args
 
+def save_model(model, run_name):
+    data_dir = os.path.join('runs', run_name)
+    try:
+        os.mkdir(data_dir)
+    except OSError as e:
+        print(e)
+        ans  = raw_input('Run with same name exists. Do you want to override it (N/y): ')
+        if not 'y' in ans.lower():
+            return False
+
+    model.save(os.path.join(data_dir, 'model.h5'))
+    with open(os.path.join(data_dir, 'model.json'), 'w') as fid:
+        json.dump(model.to_json(), fid)
+    shutil.copyfile('model.ini', os.path.join(data_dir, 'model.ini'))
 
 if __name__ == "__main__":
 
@@ -291,7 +305,12 @@ if __name__ == "__main__":
     SPLIT_RATIO = conf.getfloat('Train', 'split')
     MAX_Q_SIZE = conf.getint('Train', 'max_queue_size')
 
-    model = build_cnn_model(conf)
+    if args.input is not None:
+        with open(os.path.join(args.input, 'model.json'), 'r') as fid:
+            model = model_from_json(fid.read())
+        model.load_weights(os.path.join(args.input, 'model.h5'))
+    else:
+        model = build_cnn_model(conf)
     model.compile(loss='mse', optimizer='adam')
 
     for run_indx, run in enumerate(RUNS):
@@ -312,16 +331,7 @@ if __name__ == "__main__":
             verbose=1
         )
 
-    def save_model(model, run_name):
-        data_dir = os.path.join('runs', run_name)
-        os.mkdir(data_dir)
-        model.save(os.path.join(data_dir, 'model.h5'))
-        with open(os.path.join(data_dir, 'model.json'), 'w') as fid:
-            json.dump(model.to_json(), fid)
-        shutil.copyfile('model.ini', os.path.join(data_dir, 'model.ini'))
-
     save_model(model, args.output)
-
 
     if args.plot_epochs:
         plt.plot(hobj.history['loss'])
