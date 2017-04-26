@@ -8,9 +8,11 @@
 [track-1-right]: ./docs/tr1_lcr_right.png "Track one right"
 [track-1-right-flipped]: ./docs/tr1_lcr_right_flip.png "Track one right"
 [combined]: ./docs/combined.png "Combined all tracks"
+[combined-reduced-centre]: ./docs/combined_reduce_centre.png "Combined all tracks with reduced centre images"
+[with-and-without-noise]: ./docs/with_without_noise.png "With and without noise"
+[with-modified-brightness]: ./docs/with_modified_brightness.png "With modified brightness"
 [track-2]: ./docs/tr2_lcr.png "Track two"
-[track-2n]: ./docs/tr2_lcr_noise.png "Track two with noise"
-
+[model]: ./docs/model.png
 ## Summary
 In this excercise, solely the visual input from three front-facing cameras in a
 simulator are used
@@ -33,6 +35,8 @@ In this excercise a video stream of a car being driven in simulation around two
 tracks was recorded, a 'lake' track and a 'mountain' track, named track-1 and track-2
 respectively.
 
+
+
 ***Track-1*** is wide with interrupted lane markings, circumventing a lake.
 Although being at least twice as wide as the car in the simulator, the track proved
 to be difficult to be learned due to varios ligthning condition changes, texture
@@ -49,17 +53,17 @@ the direction of driving, the track was driven in both directions
 
 ![][track-1-right]
 
+#### Track 2 - Driving in Both lanes
 
 ***Track-2*** is a two-lane mountain track with continuos markings but with a narrow
 lane-width. The horizon on this track is in some cases visible, but mostly not. Also
 the predominant background are dark-green steep hills, steep rocks and abysses.
 The terrain of track 2 is abbundant of steep climbs, drops and sharp turns.
 
-#### Track 2 - Driving in Both lanes
 ![][track-2]
 
 
-### Data Augmentation
+### Data Preprocessing
 
 The global lighting condition and scenery color distribution varies greatly
 between both tracks. To increase the ability of the network to generalize on both
@@ -102,13 +106,32 @@ In order to improve upon the left-right driving differences, runs can be combine
 Since zero-angle images are still the most abbundant, their probability of occurrence
 was reduced to a parametric threshold (0.2 < threshold < 0.4)
 
+![][combined-reduced-centre]
 
+#### Adding random noise and modifiying image brightness
 
+Due to the large difference in backgrounds, methods for global lighting condition
+and background generalizations were seen as potentially benefitial.
 
+##### Random noise addition
 
+Images where augmented with random noise, through which each image pixel gets added or
+substracted a random value picked from a normal distribution with a parametric absolute
+maximum predefined.
 
+![][with-and-without-noise]
 
-## Method
+##### Brightness modification
+
+The global pixel values of images got added or subtracted a random value taken from
+a normal distribution with parametric absolute maximum and truncated to a uint8
+compatible size.
+
+![][with-modified-brightness]
+
+## Model
+
+![][model]
 
 ## Results
 
