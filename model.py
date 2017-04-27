@@ -125,7 +125,6 @@ def generator(samples, conf):
 
     num_samples = len(samples)
     while 1: # Loop forever so the generator never terminates
-        sklearn.utils.shuffle(samples)
         for offset in range(0, num_samples, batch_size):
             batch_samples = samples[offset:offset + batch_size]
             images = []
@@ -140,18 +139,20 @@ def generator(samples, conf):
                     elif i == 2:
                         center_angle -= corr_factor
 
+                    # Images with steering angles greater then the
+                    # flip-threshold get flipped
                     if np.abs(center_angle) > flip_thresh:
-                        # Images with steering angles greater then the
-                        # flip-threshold get flipped
                         images.append(np.fliplr(center_image))
                         angles.append(-center_angle)
-                    if np.random.rand() <= lnthresh:
-                        # Append only a fraction of straight-line images
-                        # (> line-threshold)
                         images.append(center_image)
                         angles.append(center_angle)
-
-                    if len(angles) > batch_size:
+                    # Append only a fraction of straight-line images
+                    # (> line-threshold)
+                    elif np.random.rand() <= lnthresh:
+                        images.append(center_image)
+                        angles.append(center_angle)
+                    # Stop unnecessary computation
+                    if len(angles) >= batch_size:
                         break
 
             images, angles = (np.array(images), np.array(angles))
@@ -163,9 +164,10 @@ def generator(samples, conf):
             # Perturb the image quality
             for indx, image in enumerate(images):
                 if np.random.rand() < perturb_prob:
-                    images[indx] = add_noise(image)
-                if np.random.rand() < perturb_prob:
-                    images[indx] = perturb_brightness(image)
+                    if np.random.rand():
+                        images[indx] = add_noise(image)
+                    else:
+                        images[indx] = perturb_brightness(image)
 
             yield images, angles
 
@@ -180,28 +182,6 @@ def get_samples(path_list, test_size=0.2,  plot=False):
     train, valid = train_test_split(samples, test_size=test_size)
     return train, valid
 
-def show_samples(samples):
-
-    plt.rcParams['figure.figsize'] = 14,12
-    gen = generator(samples=samples, batch_size=100)
-    [X,y] = gen.next()
-
-    left_image_indx = np.where(y == y.min())[0]
-    right_image_indx = np.where(y == y.max())[0]
-    straight_image_indx = np.where(np.abs(y)==np.min(np.abs(y)))[0]
-
-    indx = [left_image_indx[0],straight_image_indx[0],right_image_indx[0]]
-
-    plt.subplot2grid((1,3),(0,0))
-    plt.imshow(X[indx[0]])
-    plt.title("Left Curve:{}".format(y[indx[0]]))
-    plt.subplot2grid((1,3),(0,1))
-    plt.imshow(X[indx[1]])
-    plt.title("Straight:{}".format(y[indx[1]]))
-    plt.subplot2grid((1,3),(0,2))
-    plt.imshow(X[indx[2]])
-    plt.title("Right Curve:{}".format(y[indx[2]]))
-    plt.show()
 
 def build_model(conf):
 
@@ -246,7 +226,7 @@ def build_model(conf):
     print(model.summary())
     return model
 
-def save_model(model, run_name):
+def save_model(model, run_name, hobj):
     data_dir = os.path.join('runs', run_name)
     try:
         os.mkdir(data_dir)
@@ -312,8 +292,7 @@ def parser():
         sys.exit(1)
     return args
 
-if __name__ == "__main__":
-
+def main():
     args = parser()
     BATCH_SIZE = conf.getint('Train', 'batch_size')
     EPOCHS = conf.getint('Train', 'epochs')
@@ -346,4 +325,7 @@ if __name__ == "__main__":
             verbose=1
         )
 
-    save_model(model, args.output)
+    save_model(model, args.output, hobj)
+
+if __name__ == "__main__":
+    main()
