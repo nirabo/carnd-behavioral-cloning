@@ -145,7 +145,7 @@ def generator(samples, conf):
                         # flip-threshold get flipped
                         images.append(np.fliplr(center_image))
                         angles.append(-center_angle)
-                    elif np.random.rand() <= lnthresh:
+                    if np.random.rand() <= lnthresh:
                         # Append only a fraction of straight-line images
                         # (> line-threshold)
                         images.append(center_image)
