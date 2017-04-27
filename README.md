@@ -13,6 +13,10 @@
 [with-modified-brightness]: ./docs/with_modified_brightness.png "With modified brightness"
 [track-2]: ./docs/tr2_lcr.png "Track two"
 [model]: ./docs/model.png
+[cropped]: ./docs/cropped.png
+[output]: ./docs/output.gif
+[run-precision]: ./docs/model0.png
+
 ## Summary
 In this excercise, solely the visual input from three front-facing cameras in a
 simulator are used
@@ -131,11 +135,56 @@ compatible size.
 
 ## Model
 
+Several different models where iterated through. However, the largest difficulty enountered was in regards to the available memory on the GPU that was used for the computations. It had a memory capacity of 2GB and that showed very fast the incapacity to work on medium to large convolutional nets.  
+
+### Data Size Reduction
+
+#### Using a generator to load batches
+
+The first and most crucial strategy to fit the data onto the device was to dynamically load-in data as required, rather then loading all of the data at once. This was achieved using a python generator.
+
+#### Cropping redundant data
+
+Each image consists of a road segment and background consisting of horizon, sky and terrain features. Since most of the usefull information is located on the bottom part of the image, the top part was cropped. Also, in the image, the complete vehicle is visible with a road segment behind it. This information is also redundant, hence it also can be cropped out. The crop ranges found are 65px from the top and 25px from the bottom.
+
+![][cropped]
+
+#### Depth vs Width
+
+Following ideas defined in [2], building the network was guided by attempting to gradually translate/convolute the spatial information to deep layers, eventually resulting in vector. This meant to minimize information loss in the first layers by lowering strides and increasing filter kernel footprint. It also meant to use average pooling at the start, rather then the more *lossy* max-pooling. Also, much of the design can be attributed to the limited memory size of the GPU device (2GB), on which the network was trained.
+
 ![][model]
+Total params: 756,477
+Trainable params: 756,477
+Non-trainable params: 0
+
+The first convolutional layer, after the image was read-in, normalized and cropped, was chosen to be with a relatively *wide* kernel (5,5) with a stride of (1,1) followed by an average pooling layer, in order to increase information propagation through the network.
+
+The next couple of convolutional layers first gradually increase depth and reduce filter size then gradually decrease depth while further reducing filter size. Up until depth decrease, a max-pooling was used. Next no pooling was applied.
+
+No dropouts were used in the convolutional layers as this showed to have reduced performance, which can be attributed to spatial-information loss.
+
+Next, several fully connected layers were applied, seperated by dropout layers and all gradually decreasing their size to 1.
+
+A mean-squared-error loss function and an Adam optimizer at default parameters, incl. learning rate (0.001).
+
+### Training
+
+The training was performed in two-steps, a pre-training and training step. During pre-training only data from the second track was used for four epochs. During actual training all training sets were combined for four epochs, which achieved best performance.
+
+![][run-precision]
 
 ## Results
 
+After a number of attempts and parameter tweaking, a model was build that is able to drive the car accross both tracks for indefinite time.
+
+![][output]
+
 ## Conclusion
+
+The task was successfully completed.
 
 ## References
 [1] M. Bojarski, D. Del Testa, D. Dworakowski, B. Firner,B. Flepp, P. Goyal, L. D. Jackel, M. Monfort, U. Muller,J. Zhang, et al. ***End to end learning for self-driving cars***, arXiv preprint arXiv:1604.07316, 2016
+
+[2] Forrest N. Iandola and Song Han and Matthew W. Moskewicz and Khalid Ashraf and William J. Dally and Kurt Keutzer **SqueezeNet: AlexNet-level accuracy with 50x fewer parameters and $<$0.5MB model size**, 2016
