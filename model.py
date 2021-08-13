@@ -78,6 +78,7 @@ def normalize_image(img):
     img = img.astype(np.float32)
     img -= img.min()
     img /= img.max()
+    # Test this
     return img
 
 def perturb_brightness(img, thresh=0.5):
